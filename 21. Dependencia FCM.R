@@ -1,3 +1,4 @@
+
 # Script para calcular el indicador de _______
 # Que consiste en el porcentaje de Dependencia al Fondo Común Municipal (ifcm)
 
