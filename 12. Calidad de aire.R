@@ -1,3 +1,4 @@
+# TODO: Traducir al español
 ## Script that calculates ratio of days over 100 PM2.5 over the year.
 # Study cities are Coquimbo, Copiapó, Temuco, Santiago, Concepción and Valdivia.
 # Data files consist of PM2.5 data from monitoring stations in comunas of interest.
