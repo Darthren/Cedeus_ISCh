@@ -44,60 +44,110 @@ for (c in seq(files.viajes)){
   # Almacenar los nombres de las columnas.
   column_names <- colnames(tmp.viajes)
   if (grepl("Santiago", files.viajes[c])){
+    
+    # Unificar los factores
+    Factores <- paste(tmp.viajes$FactorLaboralNormal)
+    Factores <- as.numeric(gsub(",", ".", Factores))
+    tmp.viajes$Factores <- Factores
+    
     tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "persona", "IDPersona") %>%
       Corrector.nombre(colnames(tmp.viajes), "hogar", "IDFolio") %>%
       Corrector.nombre(colnames(tmp.viajes), "viaje", "IDViaje", exact.match = T) %>%
-      Corrector.nombre(colnames(tmp.viajes), "laboralnormal", "Factor_Viaje") %>%
+      Corrector.nombre(colnames(tmp.viajes), "LaboralNormal", "Factor_Viaje") %>%
       subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje"))
+    
    # El campo $TiempoViaje está en minutos. Multiplicar * 60 para pasar a segundos
    # Y convertirlo en tiempo
-    tmp.viajes$TiempoViaje <- tmp.viajes$TiempoViaje * 60
-  }
-  # Estandarizar nombres
-  tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "tiempo", "TiempoViaje") %>%
-    Corrector.nombre(colnames(tmp.viajes), "persona", "IDPersona") %>%
-    Corrector.nombre(colnames(tmp.viajes), "folio", "IDFolio") %>%
-    Corrector.nombre(colnames(tmp.viajes), "idviaje", "IDViaje") %>%
-    Corrector.nombre(colnames(tmp.viajes), "Factor", "Factor_Viaje", exact.match = T) %>%
-    subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje"))
-
-  # Si los tiempos de viaje están en formato "YMD HMS", corregir
-  if (nchar(tmp.viajes$TiempoViaje[1]) == 18){
-    tmp.viajes$TiempoViaje <- strptime(tmp.viajes$TiempoViaje, format = "%d-%m-%Y %H:%M:%S") 
-    tmp.viajes$TiempoViaje <- format(tmp.viajes$TiempoViaje,"%H:%M:%S")
-  }
-  # Transformar las unidades de tiempo de char a tiempo
-  tmp.viajes$TiempoViaje <- chron(times= tmp.viajes$TiempoViaje)
-  
-  
-  if (class(tmp.viajes$Factor_Viaje) != "numeric"){
     tmp.viajes$Factor_Viaje <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.viajes$Factor_Viaje))
-  }
-  
-  # Importar tabla con población
-  tmp.personas <- Corrector.nombre(tmp.personas, colnames(tmp.personas), "persona", "IDPersona") %>%
-    Corrector.nombre(colnames(tmp.personas), "folio", "IDFolio") %>%
-    Corrector.nombre(colnames(tmp.personas), "factor", "Factor_Persona") %>%
-    subset(select = c("IDFolio", "IDPersona", "Factor_Persona"))
-  
-  if (class(tmp.personas$Factor_Persona) != "numeric"){
+    tmp.viajes$TiempoViaje <- chron(times = tmp.viajes$TiempoViaje/(24*60))
+    tmp.viajes <- tmp.viajes[!is.na(tmp.viajes$TiempoViaje) & !is.na(tmp.viajes$Factor_Viaje),]
+    
+    # Tabla de personas
+    tmp.personas <- Corrector.nombre(tmp.personas, colnames(tmp.personas), "persona", "IDPersona") %>%
+      Corrector.nombre(colnames(tmp.personas), "hogar", "IDFolio") %>%
+      Corrector.nombre(colnames(tmp.personas), "factor", "Factor_Persona", exact.match =T) %>%
+      subset(select = c("IDFolio", "IDPersona", "Factor_Persona"))
+    # Correcciones de formato a la tabla de personas
     tmp.personas$Factor_Persona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$Factor_Persona))
-  }
+    tmp.personas$IDFolio <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$IDFolio))
+    tmp.personas$IDPersona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$IDPersona))
+    # Combinar ambos databases
+    tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona"))
+    
+    # Cuanto tiempo gastan los habitantes de Santiago en transporte al año?
+    tmp.summary.total <- tmp %>%
+      group_by(IDPersona) %>%
+      summarise(TiempoViaje = sum(TiempoViaje*Factor_Viaje, na.rm = T),
+                Factor_Persona = unique(Factor_Persona)) %>%
+      ungroup() %>%
+      summarise(Ciudad = nombre.ciudad, 
+                Promedio.Tiempo.viaje.año = round(seconds_to_period(weighted.mean(TiempoViaje, Factor_Persona)*240*24*3600)))
+    # Añadir el resultado a la tabla total
+    total.ciudad <- rbind(total.ciudad, tmp.summary.total)
+    
+  } else {
+    # Estandarizar nombres
+      tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "tiempo", "TiempoViaje") %>%
+        Corrector.nombre(colnames(tmp.viajes), "persona", "IDPersona") %>%
+        Corrector.nombre(colnames(tmp.viajes), "folio", "IDFolio") %>%
+        Corrector.nombre(colnames(tmp.viajes), "idviaje", "IDViaje") %>%
+        Corrector.nombre(colnames(tmp.viajes), "Factor", "Factor_Viaje", exact.match = T)
+      #  subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje"))
+      
+      # Si los tiempos de viaje están en formato "YMD HMS", corregir
+      if (nchar(tmp.viajes$TiempoViaje[1]) == 18){
+        tmp.viajes$TiempoViaje <- strptime(tmp.viajes$TiempoViaje, format = "%d-%m-%Y %H:%M:%S") 
+        tmp.viajes$TiempoViaje <- format(tmp.viajes$TiempoViaje,"%H:%M:%S")
+      }
+      # Transformar las unidades de tiempo de char a tiempo
+      tmp.viajes$TiempoViaje <- chron(times= tmp.viajes$TiempoViaje)
+      
+      
+      if (class(tmp.viajes$Factor_Viaje) != "numeric"){
+        tmp.viajes$Factor_Viaje <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.viajes$Factor_Viaje))
+      }
+    
+      # Corregir nombres, en caso de que no estén bien asignados
+      tmp.personas <- Corrector.nombre(tmp.personas, colnames(tmp.personas), "persona", "IDPersona") %>%
+        Corrector.nombre(colnames(tmp.personas), "folio", "IDFolio") %>%
+        Corrector.nombre(colnames(tmp.personas), "factor", "Factor_Persona") %>%
+        subset(select = c("IDFolio", "IDPersona", "Factor_Persona"))
+      # Si los factorese están con separación por ",", reemplazar por "."
+      if (class(tmp.personas$Factor_Persona) != "numeric"){
+        tmp.personas$Factor_Persona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$Factor_Persona))
+      }
+      # Combinar ambos databases (viajes y personas).
+      tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona"))
+      # Asignar ID unico a personas, para posterior análisis
+      id.personas <- paste(tmp$IDFolio, tmp$IDPersona, sep = "")
+      tmp$IDPersona <- id.personas
+      # Cuanto tiempo al año gastan los habitantes de las otras ciudades en transporte?
+      tmp.summary.total <- tmp %>%
+        group_by(IDPersona) %>%
+        summarise(TiempoViaje = sum(TiempoViaje*Factor_Viaje, na.rm = T),
+                  Factor_Persona = unique(Factor_Persona)) %>%
+        ungroup() %>%
+        summarise(Ciudad = nombre.ciudad, 
+                  Promedio.Tiempo.viaje.año = round(seconds_to_period((sum(TiempoViaje)/n())*240*24*3600)))
+      total.ciudad <- rbind(total.ciudad, tmp.summary.total)
+      
+    }
   
-  tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona"))
+
   
-  tmp.summary.total <- tmp %>%
-    group_by(IDFolio, IDPersona, IDViaje) %>%
-    summarise(TiempoViaje.tmp = sum((as.numeric(TiempoViaje)*(24*60*60)*240*Factor_Viaje))
-              , Factor_Persona = mean(Factor_Persona)) %>%
-    ungroup() %>%
-    summarise(Ciudad = nombre.ciudad,
-              Promedio_Anual_Tiempo_Viaje = round(seconds_to_period(sum(TiempoViaje.tmp)/(sum(Factor_Persona)))))
-  total.ciudad <- rbind(total.ciudad, tmp.summary.total)
+
 }  
-  tmp.summary.modoagregado <- tmp %>%
-    group_by(IDFolio, IDPersona, IDViaje) %>%
-    summarise(TiempoViaje.tmp = sum((as.numeric(TiempoViaje)*(24*60*60)*365*Factor_Viaje))
-              , Factor_Persona = mean(Factor_Persona)) %>%
-    ungroup() %>%
-    summarise(Promedio_Anual_Tiempo_Viaje = round(seconds_to_period(sum(TiempoViaje.tmp)/(sum(Factor_Persona)))))
+
+print(total.ciudad)
+
+
+test <- tmp %>%
+  group_by(IDFolio,IDPersona,IDViaje) %>%
+  summarise(TiempoViaje = TiempoViaje*Factor_Viaje,
+            Factor_Persona = unique(Factor_Persona)) %>%
+  group_by(IDFolio, IDPersona) %>%
+  summarise(TiempoViaje = sum(TiempoViaje),
+            Factor_Persona = unique(Factor_Persona)) %>%
+  ungroup() %>%
+  summarise(promedio = sum(TiempoViaje)/sum(Factor_Persona)) %>%
+  print()
