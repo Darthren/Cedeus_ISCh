@@ -1,0 +1,19 @@
+IDModo;ModoAgregado;Modo
+17;Caminata;Caminata
+18;Bicicleta;Bicicleta
+8;Transporte Publico;Auto - Metro
+12;Transporte Publico;Taxi - Metro
+13;Transporte Publico;Otros - Metro
+14;Transporte Publico;Otros - Bus TS
+15;Transporte Publico;Otros - Bus TS - Metro
+16;Otros;Otros
+1;Transporte Privado;Auto
+6;Transporte Privado;Taxi 
+2;Transporte Publico;Bus TS
+3;Transporte Publico;Bus no TS
+4;Transporte Publico;Metro
+5;Transporte Publico;Taxi Colectivo
+7;Transporte Publico;Bus TS - Bus no TS
+9;Transporte Publico;Bus TS - Metro
+10;Transporte Publico;Bus no TS - Metro
+11;Transporte Publico;Taxi Colectivo - Metro

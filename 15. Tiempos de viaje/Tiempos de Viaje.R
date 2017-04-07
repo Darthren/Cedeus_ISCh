@@ -5,6 +5,9 @@
 
 # Loading libraries and setting working directory
 
+# TODO: Incluir validación de viajes
+
+
 library(data.table); library(dplyr); library(chron); library(lubridate)
 #setwd("E:/Cedeus Sustainability Indicators/Datos/EOD")
 setwd("C:/Users/Rodrigo Villegas/Documents/Cedeus_ISCh/Cedeus_ISCh/15. Tiempos de viaje/")
@@ -34,12 +37,13 @@ ciudades <- unique(ciudades$Ciudad)
 setwd("Raw Data/")
 files.viajes <- list.files(pattern = "viajes")
 files.personas <- list.files(pattern = "personas")
-files.modo <- list.files(pattern = "Modo")
+files.modo <- list.files(pattern = "ModoReclass")
 total.ciudad <- data.frame()
+modo.ciudad <- data.frame()
 for (c in seq(files.viajes)){
   tmp.viajes <- as.data.frame(fread(files.viajes[c], sep = ";", header = T))
   tmp.personas <- as.data.frame(fread(files.personas[c], sep = ";", header = T))
-  tmp.modo <- as.data.frame(fread(files.modo[c], sep = ";", header = T))
+  tmp.modo <- as.data.frame(fread(files.modo[c], sep = ",", header = T))
   nombre.ciudad <- sub( "_.*$", "", files.viajes[c])
   # Almacenar los nombres de las columnas.
   column_names <- colnames(tmp.viajes)
@@ -54,7 +58,7 @@ for (c in seq(files.viajes)){
       Corrector.nombre(colnames(tmp.viajes), "hogar", "IDFolio") %>%
       Corrector.nombre(colnames(tmp.viajes), "viaje", "IDViaje", exact.match = T) %>%
       Corrector.nombre(colnames(tmp.viajes), "LaboralNormal", "Factor_Viaje") %>%
-      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje"))
+      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje", "IDModo"))
     
    # El campo $TiempoViaje está en minutos. Multiplicar * 60 para pasar a segundos
    # Y convertirlo en tiempo
@@ -81,9 +85,17 @@ for (c in seq(files.viajes)){
                 Factor_Persona = unique(Factor_Persona)) %>%
       ungroup() %>%
       summarise(Ciudad = nombre.ciudad, 
-                Promedio.Tiempo.viaje.año = round(seconds_to_period(weighted.mean(TiempoViaje, Factor_Persona)*240*24*3600)))
+                Promedio.Tiempo.viaje.año = round(seconds_to_period(weighted.mean(TiempoViaje, Factor_Persona)*240*24*3600)),
+                Promedio.Tiempo.viaje.diario = round(seconds_to_period(weighted.mean(TiempoViaje, Factor_Persona)*24*3600)))
     # Añadir el resultado a la tabla total
     total.ciudad <- rbind(total.ciudad, tmp.summary.total)
+    
+    
+    tmp.summary.Modo <- tmp %>%
+      group_by(ModoAgregado) %>%
+      summarise(Total = sum(TiempoViaje)/length(unique(IDPersona)))
+    
+    modo.ciudad <- rbind(modo.ciudad, tmp.summary.Modo)
     
   } else {
     # Estandarizar nombres
@@ -91,8 +103,8 @@ for (c in seq(files.viajes)){
         Corrector.nombre(colnames(tmp.viajes), "persona", "IDPersona") %>%
         Corrector.nombre(colnames(tmp.viajes), "folio", "IDFolio") %>%
         Corrector.nombre(colnames(tmp.viajes), "idviaje", "IDViaje") %>%
-        Corrector.nombre(colnames(tmp.viajes), "Factor", "Factor_Viaje", exact.match = T)
-      #  subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje"))
+        Corrector.nombre(colnames(tmp.viajes), "Factor", "Factor_Viaje", exact.match = T) %>%
+        subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje", "IDModo"))
       
       # Si los tiempos de viaje están en formato "YMD HMS", corregir
       if (nchar(tmp.viajes$TiempoViaje[1]) == 18){
@@ -112,12 +124,14 @@ for (c in seq(files.viajes)){
         Corrector.nombre(colnames(tmp.personas), "folio", "IDFolio") %>%
         Corrector.nombre(colnames(tmp.personas), "factor", "Factor_Persona") %>%
         subset(select = c("IDFolio", "IDPersona", "Factor_Persona"))
+      
       # Si los factorese están con separación por ",", reemplazar por "."
       if (class(tmp.personas$Factor_Persona) != "numeric"){
         tmp.personas$Factor_Persona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$Factor_Persona))
       }
       # Combinar ambos databases (viajes y personas).
-      tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona"))
+      tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona")) %>%
+        merge(tmp.modo, by = "IDModo")
       # Asignar ID unico a personas, para posterior análisis
       id.personas <- paste(tmp$IDFolio, tmp$IDPersona, sep = "")
       tmp$IDPersona <- id.personas
@@ -128,9 +142,15 @@ for (c in seq(files.viajes)){
                   Factor_Persona = unique(Factor_Persona)) %>%
         ungroup() %>%
         summarise(Ciudad = nombre.ciudad, 
-                  Promedio.Tiempo.viaje.año = round(seconds_to_period((sum(TiempoViaje)/n())*240*24*3600)))
+                  Promedio.Tiempo.viaje.año = round(seconds_to_period((sum(TiempoViaje)/sum(Factor_Persona))*240*24*3600)),
+                  Promedio.Tiempo.viaje.diario = round(seconds_to_period((sum(TiempoViaje)/sum(Factor_Persona))*24*3600)))
       total.ciudad <- rbind(total.ciudad, tmp.summary.total)
       
+      tmp.summary.Modo <- tmp %>%
+        group_by(ModoAgregado) %>%
+        summarise(Total = sum(TiempoViaje)/length(unique(IDPersona)))
+      
+      modo.ciudad <- rbind(modo.ciudad, tmp.summary.Modo)
     }
   
 
@@ -141,13 +161,4 @@ for (c in seq(files.viajes)){
 print(total.ciudad)
 
 
-test <- tmp %>%
-  group_by(IDFolio,IDPersona,IDViaje) %>%
-  summarise(TiempoViaje = TiempoViaje*Factor_Viaje,
-            Factor_Persona = unique(Factor_Persona)) %>%
-  group_by(IDFolio, IDPersona) %>%
-  summarise(TiempoViaje = sum(TiempoViaje),
-            Factor_Persona = unique(Factor_Persona)) %>%
-  ungroup() %>%
-  summarise(promedio = sum(TiempoViaje)/sum(Factor_Persona)) %>%
-  print()
+
