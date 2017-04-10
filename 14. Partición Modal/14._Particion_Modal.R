@@ -45,36 +45,74 @@ Estandarizador <- function(Tabla_EOD, variables.buscar, variables.cambiar){
 
 ciudades <- read.csv("Otros/Ciudades_Cedeus.csv")
 ciudades <- unique(ciudades$Ciudad)
-ciudades <- ciudades[-3]
-files.viajes <- list.files("Raw_Data", pattern = "viajes")
-files.modo <- list.files("Raw_Data", pattern = "ModoReclass")
+ciudades <- ciudades[!(ciudades =="Gran Concepcion")]
+ciudades <- sort(ciudades)
+files.viajes <- list.files("Raw_Data", pattern = "viajes") %>%
+  sort()
+files.modo <- list.files("Raw_Data", pattern = "ModoReclass") %>%
+  sort()
 
 particion.modal <- data.table()
 
 for (c in seq(files.viajes)){
   ciudad.nombre <- ciudades[c]
   
-  if (ciudad.nombre %in% c("Gran Coquimbo" , "Gran Santiago") | c == 3){
-    next()
+  if (ciudad.nombre %in% c("Gran Santiago")){
+    viajes <- read.csv(paste("Raw_Data/", files.viajes[c], sep = ""), sep = ";") %>%
+      Estandarizador(c("hogar", "persona", "Viaje_", "ModoAgregado"),
+                     c("IDFolio", "IDPersona", "IDViaje", "IDModo")) %>%
+      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "IDModo"))
+    
+    viajes.modo <- read.csv(paste("Raw_Data/", files.modo[c], sep = ""), sep = ";")
+    viajes <- merge(viajes, viajes.modo, by = "IDModo")
+    
+    viajes.summary <- viajes %>%
+      summarise(Ciudad = as.character(ciudad.nombre),
+                'Transporte Privado/Auto' = round(100*sum(ModoAgregado == "Transporte Privado/Auto")/n(),2),
+                'Transporte Publico' = round(100*sum(ModoAgregado == "Transporte Publico")/n(),2),
+                Bicicleta = round(100*sum(ModoAgregado == "Bicicleta")/n(),2),
+                Caminata = round(100*sum(ModoAgregado == "Caminata")/n(),2),
+                Otros = round(100*sum(ModoAgregado == "Otros")/n(),2),
+                Total = 100)
   }
-  
-  viajes <- read.csv(paste("Raw_Data/", files.viajes[c], sep = ""), sep = ";") %>%
-    Estandarizador(c("folio", "persona", "idViaje", "Factor_"),
-                   c("IDFolio", "IDPersona", "IDViaje", "Factor_Viaje")) %>%
-    subset(select = c("IDFolio",  "IDPersona", "IDViaje", "Factor_Viaje", "IDModo"))
-  
-  viajes.modo <- read.csv(paste("Raw_Data/", files.modo[c], sep = ""))
-  viajes <- merge(viajes, viajes.modo, by = "IDModo")
-  
-  viajes.summary <- viajes %>%
-    summarise(Ciudad = ciudad.nombre,
-              'Transporte Privado/Auto' = sum(Factor_Viaje[ModoAgregado == "Transporte Privado/Auto"])/sum(Factor_Viaje),
-              'Transporte Publico' = sum(Factor_Viaje[ModoAgregado == "Transporte Publico"])/sum(Factor_Viaje),
-              Bicicleta = sum(Factor_Viaje[ModoAgregado == "Bicicleta"])/sum(Factor_Viaje),
-              Caminata = sum(Factor_Viaje[ModoAgregado == "Caminata"])/sum(Factor_Viaje),
-              Otros = sum(Factor_Viaje[ModoAgregado == "Otros"])/sum(Factor_Viaje))
-  
+  else if (ciudad.nombre == "Gran Coquimbo") {
+    viajes <- read.csv(paste("Raw_Data/", files.viajes[c], sep = ""), sep = ";") %>%
+      Estandarizador(c("folio", "persona", "idViaje"),
+                     c("IDFolio", "IDPersona", "IDViaje")) %>%
+      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "IDModo"))
+    
+    viajes.modo <- read.csv(paste("Raw_Data/", files.modo[c], sep = ""))
+    viajes <- merge(viajes, viajes.modo, by = "IDModo")
+    
+    viajes.summary <- viajes %>%
+      summarise(Ciudad = as.character(ciudad.nombre),
+                'Transporte Privado/Auto' = round(100*sum(ModoAgregado == "Transporte Privado/Auto")/n(),2),
+                'Transporte Publico' = round(100*sum(ModoAgregado == "Transporte Publico")/n(),2),
+                Bicicleta = round(100*sum(ModoAgregado == "Bicicleta")/n(),2),
+                Caminata = round(100*sum(ModoAgregado == "Caminata")/n(),2),
+                Otros = round(100*sum(ModoAgregado == "Otros")/n(),2),
+                Total = 100)
+    } else {
+    viajes <- read.csv(paste("Raw_Data/", files.viajes[c], sep = ""), sep = ";") %>%
+      Estandarizador(c("folio", "persona", "idViaje", "Factor_"),
+                     c("IDFolio", "IDPersona", "IDViaje", "Factor_Viaje")) %>%
+      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "Factor_Viaje", "IDModo"))
+    viajes$Factor_Viaje <- as.numeric(gsub(",", ".", viajes$Factor_Viaje))
+    
+    viajes.modo <- read.csv(paste("Raw_Data/", files.modo[c], sep = ""))
+    viajes <- merge(viajes, viajes.modo, by = "IDModo")
+    
+    viajes.summary <- viajes %>%
+      summarise(Ciudad = as.character(ciudad.nombre),
+                'Transporte Privado/Auto' = round(100*sum(Factor_Viaje[ModoAgregado == "Transporte Privado/Auto"])/sum(Factor_Viaje),2),
+                'Transporte Publico' = round(100*sum(Factor_Viaje[ModoAgregado == "Transporte Publico"])/sum(Factor_Viaje),2),
+                Bicicleta = round(100*sum(Factor_Viaje[ModoAgregado == "Bicicleta"])/sum(Factor_Viaje),2),
+                Caminata = round(100*sum(Factor_Viaje[ModoAgregado == "Caminata"])/sum(Factor_Viaje),2),
+                Otros = round(100*sum(Factor_Viaje[ModoAgregado == "Otros"])/sum(Factor_Viaje),2),
+                Total = 100)
+    }
   particion.modal <- rbind(particion.modal, viajes.summary)
 }
+
 
             

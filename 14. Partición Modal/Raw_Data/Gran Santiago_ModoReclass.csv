@@ -7,8 +7,8 @@ IDModo;ModoAgregado;Modo
 14;Transporte Publico;Otros - Bus TS
 15;Transporte Publico;Otros - Bus TS - Metro
 16;Otros;Otros
-1;Transporte Privado;Auto
-6;Transporte Privado;Taxi 
+1;Transporte Privado/Auto;Auto
+6;Transporte Privado/Auto;Taxi 
 2;Transporte Publico;Bus TS
 3;Transporte Publico;Bus no TS
 4;Transporte Publico;Metro
