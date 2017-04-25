@@ -57,6 +57,7 @@ for (c in seq(files.viajes)){
     tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "persona", "IDPersona") %>%
       Corrector.nombre(colnames(tmp.viajes), "hogar", "IDFolio") %>%
       Corrector.nombre(colnames(tmp.viajes), "viaje", "IDViaje", exact.match = T) %>%
+      Corrector.nombre(colnames(tmp.viajes), "ModoAgregado", "IDModo") %>%
       Corrector.nombre(colnames(tmp.viajes), "LaboralNormal", "Factor_Viaje") %>%
       subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "Factor_Viaje", "IDModo"))
     
@@ -76,7 +77,9 @@ for (c in seq(files.viajes)){
     tmp.personas$IDFolio <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$IDFolio))
     tmp.personas$IDPersona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$IDPersona))
     # Combinar ambos databases
-    tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona"))
+    tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona")) %>%
+      merge(tmp.modo, by = "IDModo")
+    
     
     # Cuanto tiempo gastan los habitantes de Santiago en transporte al año?
     tmp.summary.total <- tmp %>%
@@ -92,11 +95,67 @@ for (c in seq(files.viajes)){
     
     
     tmp.summary.Modo <- tmp %>%
-      group_by(ModoAgregado) %>%
-      summarise(Total = sum(TiempoViaje)/length(unique(IDPersona)))
+      summarise(Ciudad = nombre.ciudad,
+                "Bicicleta" = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Bicicleta"]*Factor_Viaje[ModoAgregado == "Bicicleta"]))/length(unique(IDPersona[ModoAgregado == "Bicicleta"]))*24*3600)),
+                "Caminata"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Caminata"]*Factor_Viaje[ModoAgregado == "Caminata"]))/length(unique(IDPersona[ModoAgregado == "Caminata"]))*24*3600)),
+                "Transporte Privado/Auto"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Transporte Privado/Auto"]*Factor_Viaje[ModoAgregado == "Transporte Privado/Auto"]))/length(unique(IDPersona[ModoAgregado == "Transporte Privado/Auto"]))*24*3600)),
+                "Transporte Publico"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Transporte Publico"]*Factor_Viaje[ModoAgregado == "Transporte Publico"]))/length(unique(IDPersona[ModoAgregado == "Transporte Publico"]))*24*3600)),
+                "Otros" = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Otros"]*Factor_Viaje[ModoAgregado == "Otros"]))/length(unique(IDPersona[ModoAgregado == "Otros" ]))*24*3600)),
+                "Promedio" = round(seconds_to_period(sum(as.numeric(TiempoViaje*Factor_Viaje))/length(unique(IDPersona))*24*3600)))
+    
     
     modo.ciudad <- rbind(modo.ciudad, tmp.summary.Modo)
     
+  } else if (grepl("Coquimbo", files.viajes[c])){
+    tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "tiempo", "TiempoViaje") %>%
+      Corrector.nombre(colnames(tmp.viajes), "persona", "IDPersona") %>%
+      Corrector.nombre(colnames(tmp.viajes), "folio", "IDFolio") %>%
+      Corrector.nombre(colnames(tmp.viajes), "idviaje", "IDViaje") %>%
+      subset(select = c("IDFolio",  "IDPersona", "IDViaje", "TiempoViaje", "IDModo"))
+    
+    # Si los tiempos de viaje están en formato "YMD HMS", corregir
+    if (nchar(tmp.viajes$TiempoViaje[1]) == 18){
+      tmp.viajes$TiempoViaje <- strptime(tmp.viajes$TiempoViaje, format = "%d-%m-%Y %H:%M:%S") 
+      tmp.viajes$TiempoViaje <- format(tmp.viajes$TiempoViaje,"%H:%M:%S")
+    }
+    # Transformar las unidades de tiempo de char a tiempo
+    tmp.viajes$TiempoViaje <- chron(times= tmp.viajes$TiempoViaje)
+    
+    # Importar tabla con población
+    tmp.personas <- Corrector.nombre(tmp.personas, colnames(tmp.personas), "persona", "IDPersona") %>%
+      Corrector.nombre(colnames(tmp.personas), "folio", "IDFolio") %>%
+      Corrector.nombre(colnames(tmp.personas), "factor", "Factor_Persona") %>%
+      subset(select = c("IDFolio", "IDPersona", "Factor_Persona"))
+    
+    if (class(tmp.personas$Factor_Persona) != "numeric"){
+      tmp.personas$Factor_Persona <- as.numeric(gsub(pattern = ",",replacement = ".", x = tmp.personas$Factor_Persona))
+    }
+    
+    # Combinar ambos databases (viajes y personas).
+    tmp <- merge(tmp.personas, tmp.viajes, by = c("IDFolio", "IDPersona")) %>%
+      merge(tmp.modo, by = "IDModo")
+    
+    tmp.summary.total <- tmp %>%
+      group_by(IDFolio, IDPersona, IDViaje) %>%
+      summarise(TiempoViaje.tmp = sum((as.numeric(TiempoViaje)*(24*60*60)*240)),
+                TiempoViajediario.tmp = sum((as.numeric(TiempoViaje)*(24*60*60))),
+                Factor_Persona = mean(Factor_Persona)) %>%
+      ungroup() %>%
+      summarise(Ciudad = nombre.ciudad,
+                Promedio.Tiempo.viaje.año = round(seconds_to_period(sum(TiempoViaje.tmp)/length(unique(paste(IDFolio, IDPersona, sep = ""))))),
+                Promedio.Tiempo.viaje.diario = round(seconds_to_period(sum(TiempoViajediario.tmp)/length(unique(paste(IDFolio, IDPersona, sep = ""))))))
+    total.ciudad <- rbind(total.ciudad, tmp.summary.total)
+    
+    tmp.summary.Modo <- tmp %>%
+      summarise(Ciudad = nombre.ciudad,
+                "Bicicleta" = round((sum((TiempoViaje[ModoAgregado == "Bicicleta"]))/length(unique(IDPersona[ModoAgregado == "Bicicleta"])))),
+                "Caminata"  = round((sum((TiempoViaje[ModoAgregado == "Caminata"]))/length(unique(IDPersona[ModoAgregado == "Caminata"])))),
+                "Transporte Privado/Auto"  = round((sum((TiempoViaje[ModoAgregado == "Transporte Privado/Auto"]))/length(unique(IDPersona[ModoAgregado == "Transporte Privado/Auto"])))),
+                "Transporte Publico"  = round((sum((TiempoViaje[ModoAgregado == "Transporte Publico"]))/length(unique(IDPersona[ModoAgregado == "Transporte Publico"])))),
+                "Otros" = round((sum((TiempoViaje[ModoAgregado == "Otros"]))/length(unique(IDPersona[ModoAgregado == "Otros" ])))),
+                "Promedio" =  round((sum((TiempoViaje))/length(unique(IDPersona)))))
+    
+    modo.ciudad <- rbind(modo.ciudad, tmp.summary.Modo)
   } else {
     # Estandarizar nombres
       tmp.viajes <- Corrector.nombre(tmp.viajes, colnames(tmp.viajes), "tiempo", "TiempoViaje") %>%
@@ -147,8 +206,14 @@ for (c in seq(files.viajes)){
       total.ciudad <- rbind(total.ciudad, tmp.summary.total)
       
       tmp.summary.Modo <- tmp %>%
-        group_by(ModoAgregado) %>%
-        summarise(Total = sum(TiempoViaje)/length(unique(IDPersona)))
+        summarise(Ciudad = nombre.ciudad,
+                  "Bicicleta" = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Bicicleta"]*Factor_Viaje[ModoAgregado == "Bicicleta"]))/sum(Factor_Persona[ModoAgregado == "Bicicleta"])*24*3600)),
+                  "Caminata"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Caminata"]*Factor_Viaje[ModoAgregado == "Caminata"]))/sum(Factor_Persona[ModoAgregado == "Caminata"])*24*3600)),
+                  "Transporte Privado/Auto"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Transporte Privado/Auto"]*Factor_Viaje[ModoAgregado == "Transporte Privado/Auto"]))/sum(Factor_Persona[ModoAgregado == "Transporte Privado/Auto"])*24*3600)),
+                  "Transporte Publico"  = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Transporte Publico"]*Factor_Viaje[ModoAgregado == "Transporte Publico"]))/sum(Factor_Persona[ModoAgregado == "Transporte Publico"])*24*3600)),
+                  "Otros" = round(seconds_to_period(sum(as.numeric(TiempoViaje[ModoAgregado == "Otros"]*Factor_Viaje[ModoAgregado == "Otros"]))/sum(Factor_Persona[ModoAgregado == "Otros" ])*24*3600)),
+                  "Promedio" = round(seconds_to_period(sum(as.numeric(TiempoViaje*Factor_Viaje))/sum(Factor_Persona)*24*3600)))
+      
       
       modo.ciudad <- rbind(modo.ciudad, tmp.summary.Modo)
     }
@@ -160,5 +225,5 @@ for (c in seq(files.viajes)){
 
 print(total.ciudad)
 
-
+print(modo.ciudad)
 
