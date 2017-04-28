@@ -227,3 +227,7 @@ print(total.ciudad)
 
 print(modo.ciudad)
 
+# Enviar por correo a Stefan.
+
+write.csv(modo.ciudad, "16._Tiempos_de_viaje_(Diario).csv")
+
